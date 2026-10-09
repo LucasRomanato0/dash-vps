@@ -21,6 +21,36 @@ Desenvolvimento: `http://localhost:5173`. Preview do build: `http://localhost:41
 
 Execute `npm ci && npm run build` e publique **o conteúdo de `dist/`** no diretório público do domínio. Funciona em Nginx, Caddy, hospedagem estática ou aplicação estática no Coolify (comando de build `npm run build`, diretório de saída `dist`). Configure DNS e HTTPS de `dash-vps.romaia.com.br` na hospedagem. Não é necessário Node.js no servidor que entrega os arquivos. Este projeto não configura DNS nem faz deploy automaticamente.
 
+## Backend API (incremento inicial)
+
+O diretório `backend/` contém uma API FastAPI isolada do frontend. Nesta etapa ela cria automaticamente um SQLite local e disponibiliza somente uma verificação de saúde; o painel Vite continua usando seus dados demonstrativos e não faz chamadas para esta API.
+
+Requer Python 3.11+.
+
+```sh
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+A API estará em `http://127.0.0.1:8000`; `GET /api/v1/health` retorna:
+
+```json
+{"status":"ok","service":"dash-vps-api","database":"sqlite"}
+```
+
+Por padrão, o banco é criado em `backend/data/dash-vps.db`. Para outro local, copie `backend/.env.example` para `backend/.env` e ajuste `DASH_VPS_DATABASE_PATH`, ou exporte essa variável antes de iniciar a API. O bootstrap idempotente cria a tabela `snapshots` com os campos iniciais de medição, mas ainda não existe ingestão de métricas.
+
+Para executar os testes do backend, dentro de `backend/` e com o ambiente virtual ativado:
+
+```sh
+pytest
+```
+
+Os testes criam seus próprios bancos em diretórios temporários, sem usar nem modificar o banco de desenvolvimento.
+
 ## Demonstração e fonte real
 
 Sem `VITE_REPORT_URL`, o painel mostra explicitamente **Modo demonstrativo**. A fonte única `src/data/demo.js` gera 721 amostras horárias determinísticas, com última coleta na hora cheia e 30 dias de histórico. Atualizar relê a fonte; na mesma hora, a demonstração permanece igual.
