@@ -6,3 +6,5 @@ playwright-report/
 test-results/
 backend/.venv/
 backend/data/
+__pycache__/
+*.py[cod]
