@@ -12,6 +12,8 @@ class Settings(BaseSettings):
 
     database_path: Path = BACKEND_DIR / "data" / "dash-vps.db"
     ingest_token: str | None = None
+    cors_origins: str = ""
+    static_dir: Path | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createDemo } from '../src/data/demo.js';
-import { average, health, loadReport, selectPeriod, validateReport } from '../src/data/report.js';
+import { average, health, loadDashboard, loadReport, selectPeriod, validateReport } from '../src/data/report.js';
 const make = () => createDemo(new Date('2026-10-09T12:00:00Z'));
 test('demonstração é válida e tem 30 dias de histórico ordenado', () => {
   const report = validateReport(make());
@@ -42,5 +42,27 @@ test('carregador usa demonstração somente sem URL e expõe erros da fonte real
     assert.equal((await loadReport('/report.json')).demo,false);
     globalThis.fetch = async () => ({ ok:true, json:async()=>({}) });
     await assert.rejects(loadReport('/report.json'),/JSON inválido/);
+  } finally { globalThis.fetch = original; }
+});
+test('API tem prioridade, consulta o período e não envia credenciais', async () => {
+  const original = globalThis.fetch;
+  try {
+    const calls = [];
+    globalThis.fetch = async (url, options) => {
+      calls.push({ url, options });
+      return { ok: true, json: async () => make() };
+    };
+    for (const [days, period] of [[1, '24h'], [7, '7d'], [30, '30d']]) {
+      const result = await loadDashboard('.', '/report.json', days);
+      assert.equal(result.source, 'api');
+      assert.equal(result.demo, false);
+      assert.equal(calls.at(-1).url, `./api/v1/dashboard?period=${period}`);
+      assert.equal(calls.at(-1).options.credentials, 'omit');
+      assert.equal(calls.at(-1).options.cache, 'no-store');
+    }
+    assert.equal((await loadDashboard('', '/report.json', 1)).demo, false);
+    assert.equal(calls.at(-1).url, '/report.json');
+    assert.equal((await loadDashboard('', '', 1)).demo, true);
+    await assert.rejects(loadDashboard('.', '', 2), /Período inválido/);
   } finally { globalThis.fetch = original; }
 });

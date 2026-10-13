@@ -7,7 +7,7 @@ function metric(label, value, unit, detail, symbol, color, progress) {
 function chartPanel(id, title, subtitle, series, index, points, extra = '') {
   return `<article class="panel chart-panel ${extra}"><div class="panel-heading"><div><h3>${title}</h3><p>${subtitle}</p></div>${icon('chart-no-axes-combined')}</div><div class="legend">${series.map(([label,color], i) => `<button data-chart="${index}" data-series="${i}" aria-pressed="true" style="--series:${color}"><span></span>${label}</button>`).join('')}</div>${points.length ? `<div class="chart-wrap"><canvas id="chart-${id}" role="img" aria-label="${title}. Consulte os valores na tabela de amostras abaixo."></canvas></div>` : empty('Nenhuma amostra neste período.')}</article>`;
 }
-export function dashboard(report, days, demo) {
+export function dashboard(report, days, demo, source) {
   const { points, alerts } = selectPeriod(report, days);
   const status = health(report);
   const current = report.history.at(-1);
@@ -16,7 +16,7 @@ export function dashboard(report, days, demo) {
   const stale = Date.now() - Date.parse(report.collectedAt) > 26 * 3600000;
   const period = days === 1 ? 'últimas 24 horas' : `últimos ${days} dias`;
   return `<section class="page-heading"><div><div class="eyebrow">INFRAESTRUTURA / VISÃO GERAL</div><h1>Sua VPS, sob controle<span>.</span></h1><p>Saúde, recursos e serviços. Tudo em um só lugar.</p></div><span class="host-pill">${icon('server')} ${e(report.hostname)}</span></section>
-  <div class="demo-banner">${icon(demo ? 'flask-conical' : 'file-json')}<span><strong>${demo ? 'Modo demonstrativo' : 'Relatório JSON'}</strong> ${demo ? 'Dados simulados para explorar o painel. Nenhuma conexão com sua VPS.' : 'Dados carregados da fonte configurada.'}</span><span class="banner-tag">${demo ? 'DEMO' : 'JSON'}</span></div>
+  <div class="demo-banner">${icon(demo ? 'flask-conical' : 'file-json')}<span><strong>${demo ? 'Modo demonstrativo' : source === 'api' ? 'API da VPS' : 'Relatório JSON'}</strong> ${demo ? 'Dados simulados para explorar o painel. Nenhuma conexão com sua VPS.' : 'Dados carregados da fonte configurada.'}</span><span class="banner-tag">${demo ? 'DEMO' : source === 'api' ? 'API' : 'JSON'}</span></div>
   ${stale ? '<div class="notice warning">Coleta desatualizada: mais de 26 horas sem novos dados. O status abaixo representa a última coleta.</div>' : ''}
   <section class="status-banner ${status.level}"><div class="status-icon">${icon(status.level === 'normal' ? 'shield-check' : 'shield-alert')}</div><div><div class="status-title">${e(status.label)}<span class="badge ${status.level}">Última coleta</span></div><p>${e(status.description)}</p></div><div class="status-side"><span class="dot"></span>${report.services.filter(s=>s.online).length} de ${report.services.length} serviços online</div></section>
   <section class="section-toolbar"><div><h2>Visão geral</h2><p>Recursos atuais · médias nas ${period}</p></div><div class="periods" role="group" aria-label="Período dos gráficos e resumo">${[[1,'24h'],[7,'7 dias'],[30,'30 dias']].map(([n,label]) => `<button data-period="${n}" aria-pressed="${n === days}">${label}</button>`).join('')}</div></section>

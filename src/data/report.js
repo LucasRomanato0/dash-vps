@@ -26,6 +26,15 @@ export async function loadReport(url, signal) {
   if (!response.ok) throw new Error(`Não foi possível carregar o relatório (HTTP ${response.status}).`);
   return { report: validateReport(await response.json()), demo: false };
 }
+export async function loadDashboard(apiUrl, reportUrl, days, signal) {
+  if (!apiUrl?.trim()) return loadReport(reportUrl?.trim(), signal);
+  const period = { 1: '24h', 7: '7d', 30: '30d' }[days];
+  if (!period) throw new Error('Período inválido.');
+  const base = apiUrl.trim().replace(/\/+$/, '');
+  const response = await fetch(`${base}/api/v1/dashboard?period=${period}`, { signal, cache: 'no-store', credentials: 'omit' });
+  if (!response.ok) throw new Error(`Não foi possível carregar a API (HTTP ${response.status}).`);
+  return { report: validateReport(await response.json()), demo: false, source: 'api' };
+}
 export function selectPeriod(report, days) {
   const end = Date.parse(report.collectedAt);
   const start = end - days * 86400000;

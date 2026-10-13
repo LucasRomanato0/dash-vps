@@ -21,9 +21,9 @@ Desenvolvimento: `http://localhost:5173`. Preview do build: `http://localhost:41
 
 Execute `npm ci && npm run build` e publique **o conteúdo de `dist/`** no diretório público do domínio. Funciona em Nginx, Caddy, hospedagem estática ou aplicação estática no Coolify (comando de build `npm run build`, diretório de saída `dist`). Configure DNS e HTTPS de `dash-vps.romaia.com.br` na hospedagem. Não é necessário Node.js no servidor que entrega os arquivos. Este projeto não configura DNS nem faz deploy automaticamente.
 
-## Backend API
+## Backend API, coletor e painel integrado
 
-O diretório `backend/` contém uma API FastAPI isolada do frontend. O painel Vite continua usando seus dados demonstrativos e não faz chamadas para esta API.
+O diretório `backend/` contém a API FastAPI e o coletor. Para o frontend, a prioridade de fonte é `VITE_API_URL`, depois `VITE_REPORT_URL`; sem nenhuma das duas, o painel usa demonstração. `VITE_API_URL=.` é a configuração apropriada para a imagem Docker, que serve frontend e API no mesmo domínio.
 
 Requer Python 3.11+.
 
@@ -66,6 +66,8 @@ curl -X POST http://127.0.0.1:8000/api/v1/metrics \
   }'
 ```
 
+Inclua também `cores`, `ram_gb`, `disk_gb`, `os` e `region` quando disponíveis; o coletor abaixo os envia automaticamente.
+
 Contrato resumido: `collected_at` é uma data ISO 8601 com fuso horário; `hostname` é texto não vazio; CPU, memória e disco vão de 0 a 100; `load_1m` é não negativo; `uptime_seconds` e as quatro contagens de `containers` são inteiros não negativos. `services`, `alerts` e `problem_containers` podem ser omitidos, ser `null` ou conter listas de objetos JSON serializáveis. Não envie senhas, tokens, credenciais ou outros segredos nessas estruturas. Campos desconhecidos e valores inválidos retornam `422` com a localização do erro.
 
 Para executar os testes do backend, dentro de `backend/` e com o ambiente virtual ativado:
@@ -75,6 +77,37 @@ pytest
 ```
 
 Os testes criam seus próprios bancos em diretórios temporários, sem usar nem modificar o banco de desenvolvimento.
+
+### Coletor e cron
+
+Instale as dependências do backend na VPS e execute uma coleta sem rede para conferir o payload (não requer token):
+
+```sh
+cd backend
+source .venv/bin/activate
+python collector/collect.py --dry-run
+```
+
+Para enviar, configure `DASH_VPS_API_URL`, `DASH_VPS_INGEST_TOKEN`, opcionalmente `DASH_VPS_REGION` e `DASH_VPS_SERVICES_JSON`. Nunca coloque esses valores no frontend. Um cron a cada cinco minutos pode usar um arquivo de ambiente protegido:
+
+```cron
+*/5 * * * * set -a; . /etc/dash-vps/collector.env; set +a; /opt/dash-vps/backend/.venv/bin/python /opt/dash-vps/backend/collector/collect.py >>/var/log/dash-vps-collector.log 2>&1
+```
+
+Use permissões restritas para `/etc/dash-vps/collector.env`; ele deve conter apenas variáveis `DASH_VPS_*` e nenhum valor deve ser versionado.
+
+### Docker e Coolify
+
+Construa e execute localmente com um volume persistente:
+
+```sh
+docker build --build-arg VITE_API_URL=. -t dash-vps .
+docker run --rm -p 8000:8000 -v dash-vps-data:/app/data \
+  -e DASH_VPS_INGEST_TOKEN='troque-por-um-segredo' \
+  -e DASH_VPS_DATABASE_PATH=/app/data/dash-vps.db dash-vps
+```
+
+No Coolify, use a porta `8000`, aponte o domínio para esse serviço e monte um volume persistente em `/app/data`. Configure `DASH_VPS_INGEST_TOKEN` e `DASH_VPS_DATABASE_PATH=/app/data/dash-vps.db` como variáveis de ambiente. Defina `VITE_API_URL=.` no argumento de build (ou a URL pública da API se ela estiver em outro domínio). O token de ingestão é exclusivo do coletor/backend e não pode usar prefixo `VITE_`.
 
 ## Demonstração e fonte real
 
@@ -153,6 +186,6 @@ Todos os campos estruturais são obrigatórios. `latencyMs` pode ser omitido ou 
 
 ## Limitações desta versão
 
-Não inclui coletor real na VPS, cron, gestão/rotação de tokens, Telegram, alertas ativos nem ações sobre containers. Atualização do frontend é manual, sem polling, e ele ainda não consome a API. A coleta futura deve adaptar seu formato ao contrato v1. Fontes Google são opcionais (há fallback local); ícones e gráficos são empacotados no build. Para histórico de alta frequência, agregue as amostras antes de publicar o JSON, evitando payloads e tabelas excessivos.
+Não inclui gestão/rotação automática de tokens, Telegram, alertas ativos nem ações sobre containers. Atualização do frontend é manual, sem polling. Fontes Google são opcionais (há fallback local); ícones e gráficos são empacotados no build. Para histórico de alta frequência, agregue as amostras antes de publicar o JSON, evitando payloads e tabelas excessivos.
 
 Referências da stack: [Vite](https://vite.dev/guide/) e [Chart.js](https://www.chartjs.org/docs/latest/getting-started/).

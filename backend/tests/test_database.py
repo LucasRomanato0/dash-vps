@@ -24,6 +24,11 @@ def test_initialize_database_creates_file_and_snapshots_table(tmp_path):
         "disk_percent",
         "created_at",
         "hostname",
+        "cores",
+        "ram_gb",
+        "disk_gb",
+        "os",
+        "region",
         "load_1m",
         "uptime_seconds",
         "containers_json",
@@ -48,10 +53,29 @@ def test_initialize_database_upgrades_initial_schema_idempotently(tmp_path):
         columns = {column[1] for column in connection.execute("PRAGMA table_info(snapshots)")}
     assert {
         "hostname",
+        "cores",
+        "ram_gb",
+        "disk_gb",
+        "os",
+        "region",
         "load_1m",
         "uptime_seconds",
         "containers_json",
         "services_json",
         "alerts_json",
         "problem_containers_json",
+    } <= columns
+
+
+def test_initialize_database_new_schema_has_all_ingestion_columns(tmp_path):
+    database_path = tmp_path / "complete.db"
+
+    initialize_database(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        columns = {column[1] for column in connection.execute("PRAGMA table_info(snapshots)")}
+    assert {
+        "hostname", "cores", "ram_gb", "disk_gb", "os", "region",
+        "load_1m", "uptime_seconds", "containers_json", "services_json",
+        "alerts_json", "problem_containers_json",
     } <= columns

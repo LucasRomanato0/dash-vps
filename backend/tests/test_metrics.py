@@ -62,22 +62,22 @@ def test_ingest_metrics_returns_created_and_persists_snapshot(client):
     assert response.json() == {"id": 1, "collected_at": "2026-10-09T12:00:00Z"}
     with sqlite3.connect(database_path) as connection:
         row = connection.execute(
-            "SELECT collected_at, hostname, cpu_percent, memory_percent, disk_percent, "
+            "SELECT collected_at, hostname, cores, ram_gb, disk_gb, os, region, cpu_percent, memory_percent, disk_percent, "
             "load_1m, uptime_seconds, containers_json, services_json, alerts_json, "
             "problem_containers_json "
             "FROM snapshots WHERE id = 1"
         ).fetchone()
-    assert row[:7] == ("2026-10-09T12:00:00+00:00", "vps-01", 24.8, 62.4, 56.6, 1.24, 1977480)
-    assert json.loads(row[7]) == {"running": 12, "stopped": 1, "exited": 1, "restarting": 0}
-    assert json.loads(row[8]) == [{"name": "Hermes", "online": True, "latency_ms": 42.0}]
-    assert json.loads(row[9]) == [
+    assert row[:12] == ("2026-10-09T12:00:00+00:00", "vps-01", 1, 0, 0, "", "", 24.8, 62.4, 56.6, 1.24, 1977480)
+    assert json.loads(row[12]) == {"running": 12, "stopped": 1, "exited": 1, "restarting": 0}
+    assert json.loads(row[13]) == [{"name": "Hermes", "online": True, "latency_ms": 42.0}]
+    assert json.loads(row[14]) == [
         {
             "priority": "warning",
             "title": "Container encerrado",
             "timestamp": "2026-10-09T11:30:00Z",
         }
     ]
-    assert json.loads(row[10]) == [
+    assert json.loads(row[15]) == [
         {"name": "backup-worker", "state": "exited", "detail": "exit code 1"}
     ]
 
