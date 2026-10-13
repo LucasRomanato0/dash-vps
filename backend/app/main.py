@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from app.config import get_settings
 from app.database import initialize_database
 from app.routes.health import router as health_router
+from app.routes.metrics import router as metrics_router
 
 
 @asynccontextmanager
@@ -16,3 +17,4 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="dash-vps API", version="0.1.0", lifespan=lifespan)
 app.include_router(health_router, prefix="/api/v1")
+app.include_router(metrics_router, prefix="/api/v1")

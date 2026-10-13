@@ -21,9 +21,9 @@ Desenvolvimento: `http://localhost:5173`. Preview do build: `http://localhost:41
 
 Execute `npm ci && npm run build` e publique **o conteúdo de `dist/`** no diretório público do domínio. Funciona em Nginx, Caddy, hospedagem estática ou aplicação estática no Coolify (comando de build `npm run build`, diretório de saída `dist`). Configure DNS e HTTPS de `dash-vps.romaia.com.br` na hospedagem. Não é necessário Node.js no servidor que entrega os arquivos. Este projeto não configura DNS nem faz deploy automaticamente.
 
-## Backend API (incremento inicial)
+## Backend API
 
-O diretório `backend/` contém uma API FastAPI isolada do frontend. Nesta etapa ela cria automaticamente um SQLite local e disponibiliza somente uma verificação de saúde; o painel Vite continua usando seus dados demonstrativos e não faz chamadas para esta API.
+O diretório `backend/` contém uma API FastAPI isolada do frontend. O painel Vite continua usando seus dados demonstrativos e não faz chamadas para esta API.
 
 Requer Python 3.11+.
 
@@ -41,7 +41,31 @@ A API estará em `http://127.0.0.1:8000`; `GET /api/v1/health` retorna:
 {"status":"ok","service":"dash-vps-api","database":"sqlite"}
 ```
 
-Por padrão, o banco é criado em `backend/data/dash-vps.db`. Para outro local, copie `backend/.env.example` para `backend/.env` e ajuste `DASH_VPS_DATABASE_PATH`, ou exporte essa variável antes de iniciar a API. O bootstrap idempotente cria a tabela `snapshots` com os campos iniciais de medição, mas ainda não existe ingestão de métricas.
+Por padrão, o banco é criado em `backend/data/dash-vps.db`. Copie `backend/.env.example` para `backend/.env` e ajuste `DASH_VPS_DATABASE_PATH` se necessário, ou exporte essa variável antes de iniciar a API. O bootstrap é idempotente: cria a tabela `snapshots` e adiciona, sem apagar dados, as colunas necessárias a bancos criados pela versão inicial.
+
+### Ingestão de métricas
+
+`POST /api/v1/metrics` recebe uma fotografia de métricas e responde `201 Created` com `{ "id": 1, "collected_at": "..." }`. Os campos simples são armazenados em colunas consultáveis; as estruturas opcionais são preservadas como JSON. Autenticação ainda não faz parte deste incremento, portanto o endpoint deve ficar restrito a um ambiente confiável.
+
+```sh
+curl -X POST http://127.0.0.1:8000/api/v1/metrics \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "collected_at":"2026-10-09T12:00:00Z",
+    "hostname":"vps-01",
+    "cpu_percent":24.8,
+    "memory_percent":62.4,
+    "disk_percent":56.6,
+    "load_1m":1.24,
+    "uptime_seconds":1977480,
+    "containers":{"running":12,"stopped":1,"exited":1,"restarting":0},
+    "services":[{"name":"Hermes","online":true,"latency_ms":42}],
+    "alerts":[],
+    "problem_containers":[]
+  }'
+```
+
+Contrato resumido: `collected_at` é uma data ISO 8601 com fuso horário; `hostname` é texto não vazio; CPU, memória e disco vão de 0 a 100; `load_1m` é não negativo; `uptime_seconds` e as quatro contagens de `containers` são inteiros não negativos. `services`, `alerts` e `problem_containers` podem ser omitidos, ser `null` ou conter listas de objetos JSON serializáveis. Não envie senhas, tokens, credenciais ou outros segredos nessas estruturas. Campos desconhecidos e valores inválidos retornam `422` com a localização do erro.
 
 Para executar os testes do backend, dentro de `backend/` e com o ambiente virtual ativado:
 
@@ -128,6 +152,6 @@ Todos os campos estruturais são obrigatórios. `latencyMs` pode ser omitido ou 
 
 ## Limitações desta versão
 
-Não inclui coleta real, cron, Telegram, autenticação, alertas ativos nem ações sobre containers. Atualização é manual, sem polling. A coleta futura deve adaptar seu formato ao contrato v1. Fontes Google são opcionais (há fallback local); ícones e gráficos são empacotados no build. Para histórico de alta frequência, agregue as amostras antes de publicar o JSON, evitando payloads e tabelas excessivos.
+Não inclui coletor real na VPS, cron, autenticação, Telegram, alertas ativos nem ações sobre containers. Atualização do frontend é manual, sem polling, e ele ainda não consome a API. A coleta futura deve adaptar seu formato ao contrato v1. Fontes Google são opcionais (há fallback local); ícones e gráficos são empacotados no build. Para histórico de alta frequência, agregue as amostras antes de publicar o JSON, evitando payloads e tabelas excessivos.
 
 Referências da stack: [Vite](https://vite.dev/guide/) e [Chart.js](https://www.chartjs.org/docs/latest/getting-started/).
