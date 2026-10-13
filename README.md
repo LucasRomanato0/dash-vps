@@ -78,23 +78,30 @@ pytest
 
 Os testes criam seus próprios bancos em diretórios temporários, sem usar nem modificar o banco de desenvolvimento.
 
-### Coletor e cron
+### Coleta da VPS acionada pelo Hermes
 
-Instale as dependências do backend na VPS e execute uma coleta sem rede para conferir o payload (não requer token):
+O coletor deve rodar no host da VPS para medir o host e listar todos os containers Docker. O Runner do Hermes não tem acesso direto ao socket Docker do host. Nesta instalação, o coletor está em `/opt/dash-vps/collect.py`, e a dependência `python3-psutil` está instalada no host.
+
+O arquivo instalado no host é uma cópia do repositório e não é atualizado automaticamente quando o código muda no GitHub ou no Coolify. Se `backend/collector/collect.py` mudar, atualize também `/opt/dash-vps/collect.py` na VPS.
+
+O token da API fica somente no host, no arquivo `/etc/dash-vps/collector.env`, com permissão `0600` e proprietário `root`. O script `/usr/local/sbin/dash-vps-collect` carrega essa configuração e executa o coletor. Não copie o token para o Runner, para o Hermes, para o frontend ou para o repositório.
+
+Uma chave SSH exclusiva do Runner foi cadastrada em `/root/.ssh/authorized_keys` com comando forçado `/usr/local/sbin/dash-vps-collect` e sem PTY, encaminhamento de portas ou agente. A chave privada e a lista de hosts confiáveis ficam no volume persistente do Runner, em `/work/.ssh/dash-vps-collector` e `/work/.ssh/known_hosts`. Nunca publique ou versione a chave privada.
+
+Para acionar uma coleta sob demanda, execute **no Runner do Hermes**:
 
 ```sh
-cd backend
-source .venv/bin/activate
-python collector/collect.py --dry-run
+ssh -T -i /work/.ssh/dash-vps-collector \
+  -o IdentitiesOnly=yes \
+  -o UserKnownHostsFile=/work/.ssh/known_hosts \
+  -o StrictHostKeyChecking=yes \
+  -o BatchMode=yes \
+  root@dash-vps.romaia.com.br
 ```
 
-Para enviar, configure `DASH_VPS_API_URL`, `DASH_VPS_INGEST_TOKEN`, opcionalmente `DASH_VPS_REGION` e `DASH_VPS_SERVICES_JSON`. Nunca coloque esses valores no frontend. Um cron a cada cinco minutos pode usar um arquivo de ambiente protegido:
+O comando deve retornar `Coleta enviada com sucesso`. Cada chamada coleta as métricas atuais do host e as envia autenticadas para `POST /api/v1/metrics`. A chave só pode acionar esse coletor; ela não fornece um shell geral na VPS. Não há cron configurado no host: o Hermes pode executar esse comando quando solicitado e usar a agenda configurada por seu operador.
 
-```cron
-*/5 * * * * set -a; . /etc/dash-vps/collector.env; set +a; /opt/dash-vps/backend/.venv/bin/python /opt/dash-vps/backend/collector/collect.py >>/var/log/dash-vps-collector.log 2>&1
-```
-
-Use permissões restritas para `/etc/dash-vps/collector.env`; ele deve conter apenas variáveis `DASH_VPS_*` e nenhum valor deve ser versionado.
+Depois da coleta, o Hermes pode ler o JSON do dashboard em `https://dash-vps.romaia.com.br/api/v1/dashboard?period=24h`. Essa rota é somente leitura e não exige o token de ingestão. O dashboard web também consulta a API no mesmo domínio.
 
 ### Docker e Coolify
 
