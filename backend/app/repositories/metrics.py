@@ -42,7 +42,7 @@ def create_snapshot(database_path: Path, snapshot: MetricsSnapshotCreate) -> int
 
 
 def _dump_optional(value: object | None) -> str | None:
-    return None if value is None else json.dumps([item.model_dump(mode="json") for item in value])
+    return None if value is None else json.dumps([item.model_dump(mode="json", exclude_unset=True) for item in value])
 
 
 PERIOD_DAYS = {"24h": 1, "7d": 7, "30d": 30}
@@ -58,13 +58,13 @@ def get_dashboard(database_path: Path, period: str) -> dict | None:
         if latest is None:
             return None
         end = _parse_timestamp(latest["collected_at"])
-        start = (end - timedelta(days=PERIOD_DAYS[period])).isoformat()
+        start = end - timedelta(days=PERIOD_DAYS[period])
         rows = connection.execute(
             "SELECT collected_at, cpu_percent, memory_percent, disk_percent, "
             "load_1m, containers_json, alerts_json FROM snapshots "
             "WHERE datetime(collected_at) BETWEEN datetime(?) AND datetime(?) "
             "ORDER BY collected_at DESC, id DESC LIMIT ?",
-            (start, latest["collected_at"], MAX_HISTORY),
+            (start.isoformat(), latest["collected_at"], MAX_HISTORY),
         ).fetchall()
 
     # A repeated timestamp can occur when a collector retries; keep its newest row.
@@ -83,8 +83,9 @@ def get_dashboard(database_path: Path, period: str) -> dict | None:
                 "load": row["load_1m"], "containers": json.loads(row["containers_json"]),
             })
         for alert in json.loads(row["alerts_json"] or "[]"):
-            if start <= alert["timestamp"] <= latest["collected_at"]:
-                alerts[(alert["timestamp"], alert["title"])] = alert
+            alert_at = _parse_timestamp(alert["timestamp"])
+            if start <= alert_at <= end:
+                alerts[(alert_at, alert["title"])] = alert
     points.reverse()
     return {
         "version": 1,
@@ -104,7 +105,7 @@ def get_dashboard(database_path: Path, period: str) -> dict | None:
              "online": s["online"], "latencyMs": s.get("latency_ms")}
             for s in json.loads(latest["services_json"] or "[]")
         ],
-        "alerts": sorted(alerts.values(), key=lambda a: a["timestamp"], reverse=True)[:100],
+        "alerts": sorted(alerts.values(), key=lambda a: _parse_timestamp(a["timestamp"]), reverse=True)[:100],
         "problemContainers": json.loads(latest["problem_containers_json"] or "[]"),
     }
 
