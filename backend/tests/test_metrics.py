@@ -4,14 +4,18 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.main import app
+
+
+INGEST_TOKEN = "test-ingest-token"
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     database_path = tmp_path / "metrics.db"
     monkeypatch.setenv("DASH_VPS_DATABASE_PATH", str(database_path))
+    monkeypatch.setenv("DASH_VPS_INGEST_TOKEN", INGEST_TOKEN)
     get_settings.cache_clear()
     with TestClient(app) as test_client:
         yield test_client, database_path
@@ -44,8 +48,9 @@ def payload(**overrides):
     return snapshot
 
 
-def ingest(test_client, snapshot):
-    return test_client.post("/api/v1/metrics", json=snapshot)
+def ingest(test_client, snapshot, authorization=f"Bearer {INGEST_TOKEN}"):
+    headers = {"Authorization": authorization} if authorization is not None else {}
+    return test_client.post("/api/v1/metrics", json=snapshot, headers=headers)
 
 
 def test_ingest_metrics_returns_created_and_persists_snapshot(client):
@@ -128,3 +133,48 @@ def test_ingest_metrics_stores_multiple_snapshots(client):
         count = connection.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
     assert count == 2
 
+
+def test_ingest_metrics_rejects_missing_authorization(client):
+    test_client, database_path = client
+
+    response = ingest(test_client, payload(), authorization=None)
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    with sqlite3.connect(database_path) as connection:
+        count = connection.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
+    assert count == 0
+
+
+def test_ingest_metrics_rejects_invalid_token(client):
+    test_client, _ = client
+
+    response = ingest(test_client, payload(), authorization="Bearer wrong-token")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "authorization",
+    ["test-ingest-token", "Basic test-ingest-token", "Bearer", "Bearer ", "Bearer token extra"],
+)
+def test_ingest_metrics_rejects_malformed_authorization(client, authorization):
+    test_client, _ = client
+
+    response = ingest(test_client, payload(), authorization=authorization)
+
+    assert response.status_code == 401
+
+
+def test_ingest_metrics_fails_closed_without_configured_token(client):
+    test_client, database_path = client
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        database_path=database_path, ingest_token=None
+    )
+    try:
+        response = ingest(test_client, payload())
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Metrics ingestion is not configured"}

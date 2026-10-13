@@ -7,6 +7,7 @@ from app.main import app
 def test_health_returns_stable_payload_and_initializes_database(tmp_path, monkeypatch):
     database_path = tmp_path / "health.db"
     monkeypatch.setenv("DASH_VPS_DATABASE_PATH", str(database_path))
+    monkeypatch.delenv("DASH_VPS_INGEST_TOKEN", raising=False)
     get_settings.cache_clear()
 
     with TestClient(app) as client:

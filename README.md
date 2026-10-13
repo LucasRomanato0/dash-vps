@@ -41,14 +41,15 @@ A API estará em `http://127.0.0.1:8000`; `GET /api/v1/health` retorna:
 {"status":"ok","service":"dash-vps-api","database":"sqlite"}
 ```
 
-Por padrão, o banco é criado em `backend/data/dash-vps.db`. Copie `backend/.env.example` para `backend/.env` e ajuste `DASH_VPS_DATABASE_PATH` se necessário, ou exporte essa variável antes de iniciar a API. O bootstrap é idempotente: cria a tabela `snapshots` e adiciona, sem apagar dados, as colunas necessárias a bancos criados pela versão inicial.
+Por padrão, o banco é criado em `backend/data/dash-vps.db`. Copie `backend/.env.example` para `backend/.env`, ajuste `DASH_VPS_DATABASE_PATH` se necessário e defina `DASH_VPS_INGEST_TOKEN` com um segredo longo e aleatório. Você pode gerar um com `python -c "import secrets; print(secrets.token_urlsafe(32))"`. O arquivo `.env` já é ignorado pelo Git: nunca versione nem inclua o token em logs, respostas ou código. O bootstrap é idempotente: cria a tabela `snapshots` e adiciona, sem apagar dados, as colunas necessárias a bancos criados pela versão inicial.
 
 ### Ingestão de métricas
 
-`POST /api/v1/metrics` recebe uma fotografia de métricas e responde `201 Created` com `{ "id": 1, "collected_at": "..." }`. Os campos simples são armazenados em colunas consultáveis; as estruturas opcionais são preservadas como JSON. Autenticação ainda não faz parte deste incremento, portanto o endpoint deve ficar restrito a um ambiente confiável.
+`POST /api/v1/metrics` exige o header `Authorization: Bearer <token>`, recebe uma fotografia de métricas e responde `201 Created` com `{ "id": 1, "collected_at": "..." }`. Os campos simples são armazenados em colunas consultáveis; as estruturas opcionais são preservadas como JSON. Header ausente, malformado ou token inválido retorna `401`; se `DASH_VPS_INGEST_TOKEN` não estiver configurado, a ingestão falha de forma segura com `503`. `GET /api/v1/health` continua público.
 
 ```sh
 curl -X POST http://127.0.0.1:8000/api/v1/metrics \
+  -H "Authorization: Bearer $DASH_VPS_INGEST_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
     "collected_at":"2026-10-09T12:00:00Z",
@@ -152,6 +153,6 @@ Todos os campos estruturais são obrigatórios. `latencyMs` pode ser omitido ou 
 
 ## Limitações desta versão
 
-Não inclui coletor real na VPS, cron, autenticação, Telegram, alertas ativos nem ações sobre containers. Atualização do frontend é manual, sem polling, e ele ainda não consome a API. A coleta futura deve adaptar seu formato ao contrato v1. Fontes Google são opcionais (há fallback local); ícones e gráficos são empacotados no build. Para histórico de alta frequência, agregue as amostras antes de publicar o JSON, evitando payloads e tabelas excessivos.
+Não inclui coletor real na VPS, cron, gestão/rotação de tokens, Telegram, alertas ativos nem ações sobre containers. Atualização do frontend é manual, sem polling, e ele ainda não consome a API. A coleta futura deve adaptar seu formato ao contrato v1. Fontes Google são opcionais (há fallback local); ícones e gráficos são empacotados no build. Para histórico de alta frequência, agregue as amostras antes de publicar o JSON, evitando payloads e tabelas excessivos.
 
 Referências da stack: [Vite](https://vite.dev/guide/) e [Chart.js](https://www.chartjs.org/docs/latest/getting-started/).

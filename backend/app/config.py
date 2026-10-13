@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     """Runtime configuration loaded from environment variables."""
 
     database_path: Path = BACKEND_DIR / "data" / "dash-vps.db"
+    ingest_token: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
